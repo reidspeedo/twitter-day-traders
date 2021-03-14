@@ -4,8 +4,7 @@ import os
 import pandas as pd
 from collections import Counter
 
-# https://twitter.com/chendayang1/status/1370461155911680002
-# alpaca https://medium.com/automation-generation/quick-review-of-setting-up-alpaca-api-with-python-dd31f3ac045f
+from services import services
 
 log_file_path = "/Users/reidrelatores/PycharmProjects/twitter-day-traders/logfile.log"
 
@@ -93,10 +92,9 @@ class FavRetweetListener(tweepy.StreamListener):
         clean_tweet, include_tweet, tickers = filter_extract_tickers(tweet)
         if include_tweet:
             new_row = create_row_for_data_frame(tweet, tickers)
-            self.df = gself.df.append(new_row, ignore_index=True)
+            self.df = self.df.append(new_row, ignore_index=True)
             self.graph_data = add_chart_data(self.graph_data, new_row)
             plot_chart(self.graph_data)
-
 
     def on_error(self, status):
         logger.error(status)
