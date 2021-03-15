@@ -1,20 +1,24 @@
 from repository import repository
 from configuration import logger
 from collections import Counter
+from datetime import datetime
+
 
 def create_tweet(tweet):
     id = repository.create_tweet(tweet)
-    #Add to graph_data
     return id
 
-def retrieve_initial_tweets(number_of_tweets):
-    tweets = repository.retrieve_initial_tweets(number_of_tweets)
+def retrieve_tweets(last_datetime):
+    tos_date = datetime(1900,1,1,0,0,0)
+    tweets = repository.retrieve_tweets(last_datetime)
     ticker_list = []
-    for tweet in tweets:
+    for count, tweet in enumerate(tweets):
+        if tweet['create_at'] > tos_date:
+            tos_date = tweet['create_at']
         ticker_list.extend(tweet['tickers'])
     graph_data = Counter(ticker_list)
-    logger.info(graph_data)
-    return graph_data
+    # logger.info(graph_data)
+    return tos_date, graph_data
 
 
 def add_chart_data(graph_data, new_row):

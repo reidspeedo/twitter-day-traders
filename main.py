@@ -1,12 +1,14 @@
 import tweepy
 import logging.config
 import os
-from collections import Counter
 import time
 import threading
+from datetime import datetime
+from datetime import timedelta
 
 from services import services as svr
 from configuration import logger
+# https://twitter.com/anyuser/status/1371527034732679183
 
 def create_api():
     consumer_key = os.getenv("TWITTER_CONSUMER_KEY")
@@ -19,19 +21,17 @@ def create_api():
 
     try:
         api.verify_credentials()
-        logger.error("authentication success")
+        # logger.info("authentication success")
     except Exception as e:
-        logger.error("Error creating API", exc_info=True)
+        # logger.error("Error creating API", exc_info=True)
         raise e
-    logger.info("API created")
+    # logger.info("API created")
     return api
 
 class FavRetweetListener(tweepy.StreamListener):
     def __init__(self, api):
         self.api = api
         self.me = api.me()
-        svr.retrieve_initial_tweets(50)
-
 
     def on_status(self, tweet):
         clean_tweet, include_tweet, tickers = self.filter_extract_tickers(tweet)
@@ -58,8 +58,9 @@ class FavRetweetListener(tweepy.StreamListener):
                     pass
 
             for i in tickers:
-                if i.upper() not in unique_tickers:
-                    unique_tickers.append(i.upper())
+                tick = i.upper().replace('.','')
+                if tick not in unique_tickers:
+                    unique_tickers.append(tick.upper())
 
             if len(unique_tickers) > 0:
                 include_tweet = True
@@ -80,27 +81,58 @@ class FavRetweetListener(tweepy.StreamListener):
                 'tweet_text': tweet.text,
                 'tickers': tickers
             }
-        logger.info(df_new_row)
+        # logger.info(df_new_row)
         return df_new_row
 
-def main(my_twitterid = '1369887486810353664'):
+def streamer(my_twitterid = '1369887486810353664'):
     api = create_api()
 
     friends = [my_twitterid]
     for follower in api.friends():
         friends.append(str(follower.id))
-    logging.info(f'Friend IDs {friends}')
+    # logger.info(f'Friend IDs {friends}')
 
     tweets_listener = FavRetweetListener(api)
     stream = tweepy.Stream(api.auth, tweets_listener)
     stream.filter(follow=friends)
     return api
 
+class GraphTickers():
+    def __init__(self):
+        self.last_datetime = ''
+        self.graph_data = {}
+        self.refresh_graph_data()
 
+    def refresh_graph_data(self):
+        while True:
+            if self.last_datetime == '':
+                self.last_datetime = datetime.today()-timedelta(1)
+
+            dnu_last_datetime, self.graph_data = svr.retrieve_tweets(self.last_datetime)
+            # self.add_delta_to_graph(delta_graph_data)
+            # logger.info(self.last_datetime)
+
+            sort_graph_data = {k: v for k, v in sorted(self.graph_data.items(), key=lambda item: item[1], reverse=True)}
+            logger.info('\n\n\n\n Live Chart Updates: \n' + str(sort_graph_data))
+            time.sleep(10)
+
+    def add_delta_to_graph(self, delta_graph_data):
+        for key, value in delta_graph_data.items():
+            if key in self.graph_data.keys():
+                self.graph_data[key] += value
+            else:
+                self.graph_data[key] = value
+
+
+def grapher_function():
+    grapher = GraphTickers()
+    return grapher
 
 if __name__ == '__main__':
-    stream_object = threading.Thread(target=main)
+    graphing_object = threading.Thread(target=grapher_function)
+    stream_object = threading.Thread(target=streamer)
     stream_object.start()
+    graphing_object.start()
 
 
 

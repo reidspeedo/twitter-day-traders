@@ -8,11 +8,11 @@ db = client.twitter
 
 def create_tweet(tweet):
     id = db.tweet.insert(tweet)
-    logger.info(id)
+    logger.info(tweet['tickers'])
     return id
 
-def retrieve_initial_tweets(number_of_tweets):
-    tweets = db.tweet.find().sort([('_id', -1)]).limit(number_of_tweets)
+def retrieve_tweets(last_datetime):
+    tweets = db.tweet.find({'create_at': {"$gt": last_datetime}})
     return tweets
 
 
