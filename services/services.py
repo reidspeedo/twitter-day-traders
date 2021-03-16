@@ -8,8 +8,7 @@ def create_tweet(tweet):
     id = repository.create_tweet(tweet)
     return id
 
-def retrieve_tweets(last_datetime):
-    tos_date = datetime(1900,1,1,0,0,0)
+def retrieve_tweets(last_datetime, tos_date):
     tweets = repository.retrieve_tweets(last_datetime)
     ticker_list = []
     for count, tweet in enumerate(tweets):

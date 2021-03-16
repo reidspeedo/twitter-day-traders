@@ -8,7 +8,7 @@ db = client.twitter
 
 def create_tweet(tweet):
     id = db.tweet.insert(tweet)
-    logger.info(tweet['tickers'])
+    logger.info(f"Tweet ID: {tweet['tweet_id']} / Tickers: {tweet['tickers']}")
     return id
 
 def retrieve_tweets(last_datetime):

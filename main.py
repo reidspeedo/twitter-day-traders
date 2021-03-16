@@ -8,7 +8,7 @@ from datetime import timedelta
 
 from services import services as svr
 from configuration import logger
-# https://twitter.com/anyuser/status/1371527034732679183
+# https://twitter.com/anyuser/status/1371863979547590668
 
 def create_api():
     consumer_key = os.getenv("TWITTER_CONSUMER_KEY")
@@ -27,7 +27,6 @@ def create_api():
         raise e
     # logger.info("API created")
     return api
-
 class FavRetweetListener(tweepy.StreamListener):
     def __init__(self, api):
         self.api = api
@@ -83,15 +82,11 @@ class FavRetweetListener(tweepy.StreamListener):
             }
         # logger.info(df_new_row)
         return df_new_row
-
 def streamer(my_twitterid = '1369887486810353664'):
     api = create_api()
-
     friends = [my_twitterid]
     for follower in api.friends():
         friends.append(str(follower.id))
-    # logger.info(f'Friend IDs {friends}')
-
     tweets_listener = FavRetweetListener(api)
     stream = tweepy.Stream(api.auth, tweets_listener)
     stream.filter(follow=friends)
@@ -106,11 +101,12 @@ class GraphTickers():
     def refresh_graph_data(self):
         while True:
             if self.last_datetime == '':
-                self.last_datetime = datetime.today()-timedelta(1)
+                # self.last_datetime = datetime.today()
+                self.last_datetime = datetime(2021, 3, 16, 0, 0, 0)
 
-            dnu_last_datetime, self.graph_data = svr.retrieve_tweets(self.last_datetime)
-            # self.add_delta_to_graph(delta_graph_data)
-            # logger.info(self.last_datetime)
+            self.last_datetime, delta_graph_data = svr.retrieve_tweets(self.last_datetime, self.last_datetime)
+            self.add_delta_to_graph(delta_graph_data)
+            logger.info(self.last_datetime)
 
             sort_graph_data = {k: v for k, v in sorted(self.graph_data.items(), key=lambda item: item[1], reverse=True)}
             logger.info('\n\n\n\n Live Chart Updates: \n' + str(sort_graph_data))
@@ -122,6 +118,7 @@ class GraphTickers():
                 self.graph_data[key] += value
             else:
                 self.graph_data[key] = value
+
 
 
 def grapher_function():
