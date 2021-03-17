@@ -37,12 +37,15 @@ def retrieve_highest_price(ticker):
     return high_price
 
 def create_highest_price(high_price_dict):
-    highest_price = repository.create_highest_price(high_price_dict)
+    obj_id = repository.create_highest_price(high_price_dict)
+    highest_price = repository.retrieve_highest_price_obj(obj_id)
     high_price = highest_price[0]['high_price']
     return high_price
 
 def update_highest_price(high_price_dict):
     repository.update_highest_price(high_price_dict)
 
+def remove_highest_price(ticker):
+    repository.remove_highest_price(ticker)
 
 

@@ -19,6 +19,10 @@ def retrieve_highest_price(ticker):
     highest_price = db.highest_price.find({'ticker': ticker})
     return highest_price
 
+def retrieve_highest_price_obj(obj_id):
+    highest_price = db.highest_price.find({'_id': obj_id})
+    return highest_price
+
 def create_highest_price(high_price_dict):
     highest_price = db.highest_price.insert(high_price_dict)
     return highest_price
@@ -30,3 +34,6 @@ def update_highest_price(high_price_dict):
         }
     }, upsert=False)
     return highest_price
+
+def remove_highest_price(ticker):
+    db.highest_price.remove({'ticker': ticker})
