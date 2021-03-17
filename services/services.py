@@ -27,3 +27,22 @@ def add_chart_data(graph_data, new_row):
         else:
             graph_data[ticker] = 1
     return graph_data
+
+def retrieve_highest_price(ticker):
+    highest_price = repository.retrieve_highest_price(ticker)
+    try:
+        high_price = highest_price[0]['high_price']
+    except:
+        high_price = ''
+    return high_price
+
+def create_highest_price(high_price_dict):
+    highest_price = repository.create_highest_price(high_price_dict)
+    high_price = highest_price[0]['high_price']
+    return high_price
+
+def update_highest_price(high_price_dict):
+    repository.update_highest_price(high_price_dict)
+
+
+
