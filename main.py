@@ -6,6 +6,8 @@ import threading
 import datetime
 import alpaca_trade_api as tradeapi
 from sys import platform
+from math import floor
+from pytz import timezone
 
 from services import services as svr
 from configuration import logger
@@ -14,7 +16,7 @@ if platform == 'darwin':
     import caffeine
     caffeine.on(display=False)
 
-# https://twitter.com/anyuser/status/1372075679941070850
+# https://twitter.com/anyuser/status/1372422808941125632
 
 def create_api():
     consumer_key = os.getenv("TWITTER_CONSUMER_KEY")
@@ -35,8 +37,8 @@ def create_api():
     return api
 
 def create_alpaca_api():
-    alpaca_api_key = 'PKFH6HVRYFE9M8QAIHVW'
-    alpaca_api_secret = 'zu8zScHNhRpMkxM37bOhRO2l9zmkgz1GTYoivw4l'
+    alpaca_api_key = 'PKI1TIUG5VCQU1KCE6PC'
+    alpaca_api_secret = 'XwRtsIY4kiAfl8dtuKonlUS9xps6kTG6lpyIHA6h'
     alpaca_base_url = 'https://paper-api.alpaca.markets'
     alpaca_api = tradeapi.REST(alpaca_api_key, alpaca_api_secret, alpaca_base_url, api_version='v2')
     return alpaca_api
@@ -88,7 +90,7 @@ class FavRetweetListener(tweepy.StreamListener):
         df_new_row = \
             {
                 'tweet_id': tweet.id_str,
-                'create_at': tweet.created_at,
+                'create_at': tweet.created_at - datetime.timedelta(hours=7),
                 'user_id': tweet.user.id_str,
                 'user_name': tweet.user.screen_name,
                 'tweet_text': tweet.text,
@@ -114,24 +116,28 @@ def streamer(my_twitterid = '1369887486810353664'):
 
 class GraphTickers():
     def __init__(self):
+        self.kill_all = False
         self.last_datetime = ''
         self.graph_data = {}
         self.watchlist_dict = {}
         self.current_positions = {}
         self.orders = []
-        self.cannot_buy = {}
+        self.cannot_buy = {'$QQQ':(), '$SPY':()}
         self.buy_orders = {}
         self.sell_orders = {}
         self.cannot_sell = {}
+        self.total_percentage = 0
 
     def percentage_change(self,original, current):
         diff = ((current - original) / original) * 100
         return round(diff,2)
-
     def logging_function(self, refresh=5, end_hour=13, end_minute=0):
         while True:
             if datetime.datetime.today().hour >= end_hour and datetime.datetime.today().minute >= end_minute:
                 logger.info(f'----------------sleeping until trading opens-----------------')
+                break
+            if self.kill_all:
+                logging.info(f'----------------all processes killed-----------------')
                 break
             else:
                 cp_string = ''
@@ -150,10 +156,13 @@ class GraphTickers():
                 logger.info(f'Error selling for: {self.cannot_sell}')
                 logger.info(f'Error buying for: {self.cannot_buy}')
                 logger.info('-------------------------------------------------------------')
-
+            time.sleep(refresh)
     def refresh_graph_data(self, start_date=datetime.datetime.today().date(), refresh=5, end_hour=13, end_minute=0):
         while True:
             if datetime.datetime.today().hour >= end_hour and datetime.datetime.today().minute >= end_minute:
+                break
+            if self.kill_all:
+                logging.info(f'----------------all processes killed-----------------')
                 break
             if self.last_datetime == '':
                 self.last_datetime = datetime.datetime.combine(start_date, datetime.time(0, 0))
@@ -165,30 +174,44 @@ class GraphTickers():
                 else:
                     self.graph_data[key] = value
             time.sleep(refresh)
-
-    def watchlist(self, refresh=5, count=5, end_hour=13, end_minute=0):
+    def watchlist(self, refresh=5, count=10, end_hour=13, end_minute=0):
         while True:
             if datetime.datetime.today().hour >= end_hour and datetime.datetime.today().minute >= end_minute:
                 break
+            if self.kill_all:
+                logging.info(f'----------------all processes killed-----------------')
+                break
             self.watchlist_dict = {}
             for i, (k, v) in enumerate(sorted(self.graph_data.items(), key=lambda item: item[1], reverse=True)):
-                if len(self.watchlist_dict) < (count+1) and (k not in self.cannot_buy.keys()):
+                if len(self.watchlist_dict) < (count) and (k not in self.cannot_buy.keys()):
                     self.watchlist_dict[k] = v
             time.sleep(refresh)
 
     def alpca_buy_ticker(self, alpaca_api, refresh=5, end_hour=13, end_minute=0):
+        available_cash = float(alpaca_api.get_account().cash)
+        cash_for_each_stock = available_cash/10
         time.sleep(10)
         while True:
             if datetime.datetime.today().hour >= end_hour and datetime.datetime.today().minute >= end_minute:
                 break
+            if self.kill_all:
+                logging.info(f'----------------all processes killed-----------------')
+                break
 
             for ticker in self.watchlist_dict.keys():
                 if ticker not in self.current_positions.keys() and ticker not in self.orders:
-                    try:
-                        alpaca_api.submit_order(symbol=ticker.replace('$',''), qty=100, side='buy', type='market', time_in_force='day')
-                        self.buy_orders[ticker] = datetime.datetime.now()
-                    except Exception as e:
-                        self.cannot_buy[ticker] = (e, datetime.datetime.now())
+                    available_cash = float(alpaca_api.get_account().cash)
+                    if available_cash > cash_for_each_stock:
+                        try:
+                            jtick = ticker.replace('$', '')
+                            ticker_ask_price = alpaca_api.get_barset(jtick, '1Min', limit=1)[jtick][0].h
+                            qty = floor(cash_for_each_stock / ticker_ask_price)
+                            alpaca_api.submit_order(symbol=jtick, qty=qty, side='buy', type='market', time_in_force='day')
+                            self.buy_orders[ticker] = datetime.datetime.now()
+                        except Exception as e:
+                            self.cannot_buy[ticker] = (e, datetime.datetime.now())
+                    else:
+                        pass
 
             time.sleep(refresh)
     def alpaca_monitor_and_sell(self, alpaca_api, refresh = 5, max_diff = 10, diff = 2, end_hour=13, end_minute=0):
@@ -196,47 +219,33 @@ class GraphTickers():
             temp_current_position = {}
             if datetime.datetime.today().hour >= end_hour and datetime.datetime.today().minute >= end_minute:
                 break
+            if self.kill_all:
+                logging.info(f'----------------all processes killed-----------------')
+                break
+
             all_position_details = alpaca_api.list_positions()
             all_order_details = alpaca_api.list_orders()
+            total_percentage = 0
             for position in all_position_details:
                 ticker = f'${position.symbol}'
                 temp_dict = dict(current_price=position.current_price,avg_entry_price=position.avg_entry_price,qty=position.qty)
                 temp_current_position[ticker] = temp_dict
                 self.current_positions = temp_current_position
+                percentage = self.percentage_change(float(position.avg_entry_price), float(position.current_price))
+                total_percentage = total_percentage + percentage
 
-                #Retrieve High Price into repository:
-                ticker_high_price = svr.retrieve_highest_price(ticker)
-                if ticker_high_price == '':
-                    ticker_high_price = float(svr.create_highest_price({'ticker': ticker, 'high_price': position.current_price}))
-                else:
-                    ticker_high_price = float(ticker_high_price)
-                    current_price = float(position.current_price)
-                    buy_price = float(position.avg_entry_price)
-                    if current_price > ticker_high_price: #if you are positive - how positive?
-                        current_diff = ((current_price/buy_price)-1)*100
-                        if current_diff > max_diff: #If you've made 30% profit then sell
-                            try:
-                                alpaca_api.submit_order(symbol=ticker.replace('$',''), qty=100, side='sell', type='market', time_in_force='day')
-                                self.sell_orders[ticker] = datetime.datetime.now()
-                                svr.remove_highest_price(ticker)
-                            except Exception as e:
-                                self.cannot_sell[ticker] = (e, datetime.datetime.now())
-                        else: #If <30% then just update the highest price
-                            svr.update_highest_price({'ticker': ticker, 'high_price': position.current_price})
-                    else: #if you are negative - how negative?
-                        current_diff = (1-(current_price/ticker_high_price))*100
-                        if current_diff > diff:
-                            try:
-                                alpaca_api.submit_order(symbol=ticker.replace('$',''), qty=100, side='sell', type='market', time_in_force='day')
-                                self.sell_orders[ticker] = datetime.datetime.now()
-                                svr.remove_highest_price(ticker)
-                            except Exception as e:
-                                self.cannot_sell[ticker] = (e, datetime.datetime.now())
+            self.total_percentage = total_percentage
+
+            if total_percentage < -10 or total_percentage > 10:
+                all_position_details = alpaca_api.list_positions()
+                for position in all_position_details:
+                    alpaca_api.submit_order(symbol=position.symbol, qty=position.qty, side='sell', type='market', time_in_force='day')
+                self.kill_all = True
 
             self.orders = [f'${order.symbol}' for order in all_order_details]
             time.sleep(refresh)
 
-def main(start_hour=6, start_minute=35, end_hour=13, end_minute=0):
+def main(start_hour=6, start_minute=35, wait_start=14400, end_hour=13, end_minute=0):
     alpaca_api = create_alpaca_api()
     grapher = GraphTickers()
     stream_object = threading.Thread(target=streamer)
@@ -254,34 +263,47 @@ def main(start_hour=6, start_minute=35, end_hour=13, end_minute=0):
         wait = (future - t).total_seconds()
         logging.info(f'...Paused for {wait/60} minutes until next runtime...')
         time.sleep(wait)
+        grapher.kill_all = False
 
         logging_function_object = threading.Thread(target=grapher.logging_function, kwargs={'end_hour':end_hour, 'end_minute':end_minute})
         watchlist_object = threading.Thread(target=grapher.watchlist, kwargs={'end_hour':end_hour, 'end_minute':end_minute})
         graphing_object = threading.Thread(target=grapher.refresh_graph_data, kwargs={'end_hour':end_hour, 'end_minute':end_minute})
         alpaca_object = threading.Thread(target=grapher.alpaca_monitor_and_sell, args=(alpaca_api,), kwargs={'end_hour':end_hour, 'end_minute':end_minute})
         alpaca_buy = threading.Thread(target=grapher.alpca_buy_ticker, args=(alpaca_api,), kwargs={'end_hour':end_hour, 'end_minute':end_minute})
+
         logging_function_object.start()
         watchlist_object.start()
         graphing_object.start()
+
+        time.sleep(wait_start)
         alpaca_object.start()
         alpaca_buy.start()
+
         logging_function_object.join()
         watchlist_object.join()
         graphing_object.join()
         alpaca_object.join()
         alpaca_buy.join()
 
-
 if __name__ == '__main__':
-    # alpaca_api.cancel_all_orders()
+    # # alpaca_api.cancel_all_orders()
     # alpaca_api = create_alpaca_api()
-    # print(alpaca_api.list_positions())
-     main(start_hour=13, start_minute=6, end_hour=13, end_minute=7)
+    # available_cash = alpaca_api.list_positions()
+    # print(available_cash)
+    current_moment = datetime.datetime.now()
+    start_hour = int(current_moment.strftime('%-H'))
+    start_minute = int(current_moment.strftime('%-M'))+1
+    main(start_hour=start_hour, start_minute=start_minute, wait_start=6000, end_hour=10, end_minute=55)
 
 
 
 
-
+# Add string datetime
+# Convert to datetime
+# Import Twilio
+# Stop Limit
+# Add extended watchlist
+# Combine classes?
 
 
 
