@@ -16,7 +16,6 @@ def retrieve_tweets(last_datetime, tos_date):
             tos_date = tweet['create_at']
         ticker_list.extend(tweet['tickers'])
     graph_data = Counter(ticker_list)
-    # logger.info(graph_data)
     return tos_date, graph_data
 
 
